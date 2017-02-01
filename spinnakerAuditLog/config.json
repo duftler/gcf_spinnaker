@@ -1,4 +1,5 @@
 {
   "USERNAME": "SOME_USERNAME",
-  "PASSWORD": "SOME_PASSWORD"
+  "PASSWORD": "SOME_PASSWORD",
+  "TIMEZONE": "America/New_York"
 }

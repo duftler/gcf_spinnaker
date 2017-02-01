@@ -4,6 +4,7 @@
 //  - Any equivalent to console.debug()?
 
 const config = require('./config.json');
+const moment = require('moment-timezone');
 
 /**
  * Logs Spinnaker events to Stackdriver Logging.
@@ -12,7 +13,7 @@ const config = require('./config.json');
  * @param {!Object} res Cloud Function response context.
  */
 exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
-  console.warn("** req.body.payload=" + JSON.stringify(req.body.payload));
+  console.warn('** req.body.payload=' + JSON.stringify(req.body.payload));
 
   try {
     verifyWebhook(req.get('authorization') || '');
@@ -25,18 +26,18 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
       var eventType = req.body.payload.details.type;
       var execution = content.execution;
       var context = content.context;
-      var user = execution && execution.authentication && execution.authentication.user ? execution.authentication.user : "n/a";
+      var user = execution && execution.authentication && execution.authentication.user ? execution.authentication.user : 'n/a';
 
       if (execution && execution.trigger && execution.trigger.runAsUser) {
         user = execution.trigger.runAsUser;
       }
 
-      var creationTimestamp = new Date(Number(req.body.payload.details.created)).toUTCString();
+      var creationTimestamp = moment.tz(Number(req.body.payload.details.created), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss') + ' ' + config.TIMEZONE;
 
       if (eventSource === 'igor') {
         if (eventType === 'build') {
           var lastBuild = content.project.lastBuild;
-          var jenkinsTimestamp = new Date(Number(lastBuild.timestamp)).toUTCString();
+          var jenkinsTimestamp = moment.tz(Number(lastBuild.timestamp), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss') + ' ' + config.TIMEZONE;
 
           console.log('Spinnaker: Jenkins project ' + content.project.name + ' successfully completed build #' + lastBuild.number + ' at ' + jenkinsTimestamp + '.');
         } else if (eventType === 'docker') {
