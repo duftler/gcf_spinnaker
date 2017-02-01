@@ -32,12 +32,13 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
         user = execution.trigger.runAsUser;
       }
 
-      var creationTimestamp = moment.tz(Number(req.body.payload.details.created), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss') + ' ' + config.TIMEZONE;
+      var creationTimestamp = moment.tz(Number(req.body.payload.details.created), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss z');
 
+      var reasonSegment;
       if (eventSource === 'igor') {
         if (eventType === 'build') {
           var lastBuild = content.project.lastBuild;
-          var jenkinsTimestamp = moment.tz(Number(lastBuild.timestamp), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss') + ' ' + config.TIMEZONE;
+          var jenkinsTimestamp = moment.tz(Number(lastBuild.timestamp), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss z');
 
           console.log('Spinnaker: Jenkins project ' + content.project.name + ' successfully completed build #' + lastBuild.number + ' at ' + jenkinsTimestamp + '.');
         } else if (eventType === 'docker') {
@@ -49,7 +50,7 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
         if (!content.standalone) {
           console.log('Spinnaker: User ' + user + ' executed operation ' + context.stageDetails.name + ' (of type ' + context.stageDetails.type + ') via pipeline ' + execution.name + ' of application ' + execution.application + ' at ' + creationTimestamp + '.');
         } else {
-          var reasonSegment = context.reason ? ' for reason "' + context.reason + '"' : '';
+          reasonSegment = context.reason ? ' for reason "' + context.reason + '"' : '';
 
           console.log('Spinnaker: User ' + user + ' executed ad-hoc operation ' + execution.stages[0].type + ' (' + execution.description + ')' + reasonSegment + ' at ' + creationTimestamp + '.');
         }
@@ -61,7 +62,7 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
         var cancellationUser = execution.canceledBy ? execution.canceledBy : null;
 
         if (cancellationUser) {
-          var reasonSegment = execution.cancellationReason ? ' for reason "' + execution.cancellationReason + '"' : '';
+          reasonSegment = execution.cancellationReason ? ' for reason "' + execution.cancellationReason + '"' : '';
 
           console.log('Spinnaker: User ' + cancellationUser + ' canceled pipeline ' + execution.name + ' of application ' + execution.application + reasonSegment + ' at ' + creationTimestamp + '.');
         } else {
