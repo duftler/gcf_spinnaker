@@ -1,8 +1,3 @@
-// Open issues:
-//  - How to render creationTimestamp in user's timezone (and same format as 'Activity Feed'?) so it matches the rest of pantheon?
-//  - Any way to publish via protoPayload instead of textPayload? (This would maybe let us eventually publish actual 'Google Cloud Audit Logging' 'Admin Activity' log entries.)
-//  - Any equivalent to console.debug()?
-
 const config = require('./config.json');
 const moment = require('moment-timezone');
 
