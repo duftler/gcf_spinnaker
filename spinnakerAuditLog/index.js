@@ -35,7 +35,11 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
           var lastBuild = content.project.lastBuild;
           var jenkinsTimestamp = moment.tz(Number(lastBuild.timestamp), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss z');
 
-          console.log('Spinnaker: Jenkins project ' + content.project.name + ' successfully completed build #' + lastBuild.number + ' at ' + jenkinsTimestamp + '.');
+          if (lastBuild.result === 'SUCCESS') {
+            console.log('Spinnaker: Jenkins project ' + content.project.name + ' successfully completed build #' + lastBuild.number + ' at ' + jenkinsTimestamp + '.');
+          } else {
+            console.log('Spinnaker: Jenkins project ' + content.project.name + ' completed build #' + lastBuild.number + ' with status ' + lastBuild.result + ' at ' + jenkinsTimestamp + '.');
+          }
         } else if (eventType === 'docker') {
           console.log('Spinnaker: Docker tag ' + content.tag + ' was pushed to repository ' + content.repository + ' in registry ' + content.registry + ' at ' + creationTimestamp + '.');
         }
