@@ -1,5 +1,6 @@
 const config = require('./config.json');
 const moment = require('moment-timezone');
+const logging = require('@google-cloud/logging')({projectId: config.PROJECT_ID, credentials: require(config.CREDENTIALS_PATH)});
 
 /**
  * Logs Spinnaker events to Stackdriver Logging.
@@ -8,7 +9,7 @@ const moment = require('moment-timezone');
  * @param {!Object} res Cloud Function response context.
  */
 exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
-  console.warn('** req.body.payload=' + JSON.stringify(req.body.payload));
+  log('req.body.payload=' + JSON.stringify(req.body.payload), 'debug');
 
   try {
     verifyWebhook(req.get('authorization') || '');
@@ -36,59 +37,59 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
           var jenkinsTimestamp = moment.tz(Number(lastBuild.timestamp), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss z');
 
           if (lastBuild.result === 'SUCCESS') {
-            console.log('Spinnaker: Jenkins project ' + content.project.name + ' successfully completed build #' + lastBuild.number + ' at ' + jenkinsTimestamp + '.');
+            log('Spinnaker: Jenkins project ' + content.project.name + ' successfully completed build #' + lastBuild.number + ' at ' + jenkinsTimestamp + '.');
           } else {
-            console.log('Spinnaker: Jenkins project ' + content.project.name + ' completed build #' + lastBuild.number + ' with status ' + lastBuild.result + ' at ' + jenkinsTimestamp + '.');
+            log('Spinnaker: Jenkins project ' + content.project.name + ' completed build #' + lastBuild.number + ' with status ' + lastBuild.result + ' at ' + jenkinsTimestamp + '.');
           }
         } else if (eventType === 'docker') {
-          console.log('Spinnaker: Docker tag ' + content.tag + ' was pushed to repository ' + content.repository + ' in registry ' + content.registry + ' at ' + creationTimestamp + '.');
+          log('Spinnaker: Docker tag ' + content.tag + ' was pushed to repository ' + content.repository + ' in registry ' + content.registry + ' at ' + creationTimestamp + '.');
         }
       } else if (eventType === 'git') {
-        console.log('Spinnaker: Received webhook for project ' + content.slug + ' in org ' + content.repoProject + ' from ' + eventSource + ' at commit ' + content.hash + ' on branch ' + content.branch + ' at ' + creationTimestamp + '.');
+        log('Spinnaker: Received webhook for project ' + content.slug + ' in org ' + content.repoProject + ' from ' + eventSource + ' at commit ' + content.hash + ' on branch ' + content.branch + ' at ' + creationTimestamp + '.');
       } else if (eventType === 'orca:stage:starting' && !context.stageDetails.isSynthetic) {
         if (!content.standalone) {
-          console.log('Spinnaker: User ' + user + ' executed operation ' + context.stageDetails.name + ' (of type ' + context.stageDetails.type + ') via pipeline ' + execution.name + ' of application ' + execution.application + ' at ' + creationTimestamp + '.');
+          log('Spinnaker: User ' + user + ' executed operation ' + context.stageDetails.name + ' (of type ' + context.stageDetails.type + ') via pipeline ' + execution.name + ' of application ' + execution.application + ' at ' + creationTimestamp + '.');
         } else {
           reasonSegment = context.reason ? ' for reason "' + context.reason + '"' : '';
 
-          console.log('Spinnaker: User ' + user + ' executed ad-hoc operation ' + execution.stages[0].type + ' (' + execution.description + ')' + reasonSegment + ' at ' + creationTimestamp + '.');
+          log('Spinnaker: User ' + user + ' executed ad-hoc operation ' + execution.stages[0].type + ' (' + execution.description + ')' + reasonSegment + ' at ' + creationTimestamp + '.');
         }
       } else if (eventType === 'orca:pipeline:starting') {
         var parametersSegment = execution.trigger.parameters ? ' (with parameters ' + JSON.stringify(execution.trigger.parameters) + ')' : '';
 
-        console.log('Spinnaker: User ' + user + ' executed pipeline ' + execution.name + ' of application ' + execution.application + ' via ' + execution.trigger.type + ' trigger' + parametersSegment + ' at ' + creationTimestamp + '.');
+        log('Spinnaker: User ' + user + ' executed pipeline ' + execution.name + ' of application ' + execution.application + ' via ' + execution.trigger.type + ' trigger' + parametersSegment + ' at ' + creationTimestamp + '.');
       } else if (eventType === 'orca:pipeline:failed' && execution.canceled) {
         var cancellationUser = execution.canceledBy ? execution.canceledBy : null;
 
         if (cancellationUser) {
           reasonSegment = execution.cancellationReason ? ' for reason "' + execution.cancellationReason + '"' : '';
 
-          console.log('Spinnaker: User ' + cancellationUser + ' canceled pipeline ' + execution.name + ' of application ' + execution.application + reasonSegment + ' at ' + creationTimestamp + '.');
+          log('Spinnaker: User ' + cancellationUser + ' canceled pipeline ' + execution.name + ' of application ' + execution.application + reasonSegment + ' at ' + creationTimestamp + '.');
         } else {
-          console.log('Spinnaker: Pipeline ' + execution.name + ' of application ' + execution.application + ' failed at ' + creationTimestamp + '.');
+          log('Spinnaker: Pipeline ' + execution.name + ' of application ' + execution.application + ' failed at ' + creationTimestamp + '.');
         }
       } else if (eventType === 'orca:pipeline:complete') {
-        console.log('Spinnaker: Pipeline ' + execution.name + ' of application ' + execution.application + ' completed at ' + creationTimestamp + '.');
+        log('Spinnaker: Pipeline ' + execution.name + ' of application ' + execution.application + ' completed at ' + creationTimestamp + '.');
       } else if (!content.standalone && context && context.stageDetails && context.stageDetails.type === 'manualJudgment' && eventType === 'orca:stage:failed') {
-        console.log('Spinnaker: User ' + context.lastModifiedBy + ' judged stage ' + context.stageDetails.name + ' of pipeline ' + execution.name + ' to stop at ' + creationTimestamp + '.');
+        log('Spinnaker: User ' + context.lastModifiedBy + ' judged stage ' + context.stageDetails.name + ' of pipeline ' + execution.name + ' to stop at ' + creationTimestamp + '.');
       } else if (!content.standalone && context && context.stageDetails && context.stageDetails.type === 'manualJudgment' && eventType === 'orca:stage:complete') {
         var judgmentInputSegment = context.judgmentInput ? ' (judgment "' + context.judgmentInput + '" was selected)' : '';
 
-        console.log('Spinnaker: User ' + context.lastModifiedBy + ' judged stage ' + context.stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to continue' + judgmentInputSegment + ' at ' + creationTimestamp + '.');
+        log('Spinnaker: User ' + context.lastModifiedBy + ' judged stage ' + context.stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to continue' + judgmentInputSegment + ' at ' + creationTimestamp + '.');
       } else if (eventType === 'orca:task:failed') {
         var failureReasonSegment = context.exception && context.exception.details && context.exception.details.errors && context.exception.details.errors[0] ? ' due to ' + JSON.stringify(context.exception.details.errors) : '';
 
         if (!content.standalone) {
-          console.log('Spinnaker: Operation ' + context.stageDetails.name + ' (of type ' + context.stageDetails.type + ') of pipeline ' + execution.name + ' of application ' + execution.application + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.');        
+          log('Spinnaker: Operation ' + context.stageDetails.name + ' (of type ' + context.stageDetails.type + ') of pipeline ' + execution.name + ' of application ' + execution.application + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.');        
         } else {
-          console.log('Spinnaker: Ad-hoc operation ' + context.stageDetails.type + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.');
+          log('Spinnaker: Ad-hoc operation ' + context.stageDetails.type + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.');
         }
       }
 
       res.status(200).send('Success: ' + req.body.eventName);
     }
   } catch (err) {
-    console.error(err);
+    log(err, 'error');
     res.status(err.code || 500).send(err);
   }
 };
@@ -107,4 +108,19 @@ function verifyWebhook (authorization) {
     error.code = 401;
     throw error;
   }
+}
+
+/**
+ * Writes message to StackDriver with specified severity.
+ * 
+ * @param {string} message - The message to log to StackDriver logging.
+ * @param {('alert', 'critical', 'debug', 'emergency', 'error', 'info', 'notice', 'warning', 'write')} severity - The 
+ * severity of the logged message. Defaults to 'write'.
+ */
+function log(message, severity = 'write') {
+  var log = logging.log(config.AUDIT_LOG_NAME);
+  var metadata = {resource: {type: 'cloud_function'}};
+  var entry = log.entry(metadata, {message: message});
+  
+  log[severity](entry, function() {});
 }
