@@ -9,7 +9,7 @@ const logging = require('@google-cloud/logging')({projectId: config.PROJECT_ID, 
  * @param {!Object} res Cloud Function response context.
  */
 exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
-  log('** req.body.payload=' + JSON.stringify(req.body.payload), 'warning');
+  log('req.body.payload=' + JSON.stringify(req.body.payload), 'debug');
 
   try {
     verifyWebhook(req.get('authorization') || '');
