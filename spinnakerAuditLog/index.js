@@ -49,6 +49,8 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
       } else if (eventType === 'orca:stage:starting' && !context.stageDetails.isSynthetic) {
         if (!content.standalone) {
           log('User ' + user + ' executed operation ' + context.stageDetails.name + ' (of type ' + context.stageDetails.type + ') via pipeline ' + execution.name + ' of application ' + execution.application + ' at ' + creationTimestamp + '.', execution.application, execution.name);
+        } else if (context.stageDetails.type === 'savePipeline') {
+          log('User ' + user + ' executed operation (' + execution.description + ') at ' + creationTimestamp + '.', null, null);
         } else {
           reasonSegment = context.reason ? ' for reason "' + context.reason + '"' : '';
 
