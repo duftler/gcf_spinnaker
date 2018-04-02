@@ -22,6 +22,7 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
       var eventType = req.body.payload.details.type;
       var execution = content.execution;
       var context = content.context;
+      var stageDetails = (execution && execution.stages && execution.stages.length > 0) ? execution.stages.find(stage => stage.status === 'RUNNING') : {};
       var user = execution && execution.authentication && execution.authentication.user ? execution.authentication.user : 'n/a';
 
       if (execution && execution.trigger && execution.trigger.runAsUser) {
@@ -31,6 +32,7 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
       var creationTimestamp = moment.tz(Number(req.body.payload.details.created), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss z');
 
       var reasonSegment;
+
       if (eventSource === 'igor') {
         if (eventType === 'build') {
           var lastBuild = content.project.lastBuild;
@@ -46,10 +48,10 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
         }
       } else if (eventType === 'git') {
         log('Received webhook for project ' + content.slug + ' in org ' + content.repoProject + ' from ' + eventSource + ' at commit ' + content.hash + ' on branch ' + content.branch + ' at ' + creationTimestamp + '.', null, null);
-      } else if (eventType === 'orca:stage:starting' && !context.stageDetails.isSynthetic) {
+      } else if (eventType === 'orca:stage:starting' && !stageDetails.syntheticStageOwner) {
         if (!content.standalone) {
-          log('User ' + user + ' executed operation ' + context.stageDetails.name + ' (of type ' + context.stageDetails.type + ') via pipeline ' + execution.name + ' of application ' + execution.application + ' at ' + creationTimestamp + '.', execution.application, execution.name);
-        } else if (context.stageDetails.type === 'savePipeline') {
+          log('User ' + user + ' executed operation ' + stageDetails.name + ' (of type ' + stageDetails.type + ') via pipeline ' + execution.name + ' of application ' + execution.application + ' at ' + creationTimestamp + '.', execution.application, execution.name);
+        } else if (stageDetails.type === 'savePipeline') {
           log('User ' + user + ' executed operation (' + execution.description + ') at ' + creationTimestamp + '.', null, null);
         } else {
           reasonSegment = context.reason ? ' for reason "' + context.reason + '"' : '';
@@ -72,19 +74,19 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
         }
       } else if (eventType === 'orca:pipeline:complete') {
         log('Pipeline ' + execution.name + ' of application ' + execution.application + ' completed at ' + creationTimestamp + '.', execution.application, execution.name);
-      } else if (!content.standalone && context && context.stageDetails && context.stageDetails.type === 'manualJudgment' && eventType === 'orca:stage:failed') {
-        log('User ' + context.lastModifiedBy + ' judged stage ' + context.stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to stop at ' + creationTimestamp + '.', execution.application, execution.name, 'warning');
-      } else if (!content.standalone && context && context.stageDetails && context.stageDetails.type === 'manualJudgment' && eventType === 'orca:stage:complete') {
+      } else if (!content.standalone && context && stageDetails && stageDetails.type === 'manualJudgment' && eventType === 'orca:stage:failed') {
+        log('User ' + context.lastModifiedBy + ' judged stage ' + stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to stop at ' + creationTimestamp + '.', execution.application, execution.name, 'warning');
+      } else if (!content.standalone && context && stageDetails && stageDetails.type === 'manualJudgment' && eventType === 'orca:stage:complete') {
         var judgmentInputSegment = context.judgmentInput ? ' (judgment "' + context.judgmentInput + '" was selected)' : '';
 
-        log('User ' + context.lastModifiedBy + ' judged stage ' + context.stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to continue' + judgmentInputSegment + ' at ' + creationTimestamp + '.');
+        log('User ' + context.lastModifiedBy + ' judged stage ' + stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to continue' + judgmentInputSegment + ' at ' + creationTimestamp + '.');
       } else if (eventType === 'orca:task:failed') {
         var failureReasonSegment = context.exception && context.exception.details && context.exception.details.errors && context.exception.details.errors[0] ? ' due to ' + JSON.stringify(context.exception.details.errors) : '';
 
         if (!content.standalone) {
-          log('Operation ' + context.stageDetails.name + ' (of type ' + context.stageDetails.type + ') of pipeline ' + execution.name + ' of application ' + execution.application + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.', execution.application, execution.name, 'error');
+          log('Operation ' + stageDetails.name + ' (of type ' + stageDetails.type + ') of pipeline ' + execution.name + ' of application ' + execution.application + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.', execution.application, execution.name, 'error');
         } else {
-          log('Ad-hoc operation ' + context.stageDetails.type + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.', null, null, 'error');
+          log('Ad-hoc operation ' + stageDetails.type + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.', null, null, 'error');
         }
       }
 
