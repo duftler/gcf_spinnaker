@@ -1,6 +1,11 @@
 const config = require('./config.json');
 const moment = require('moment-timezone');
-const logging = require('@google-cloud/logging')({projectId: config.PROJECT_ID, credentials: require(config.CREDENTIALS_PATH)});
+const {Logging} = require('@google-cloud/logging');
+
+const logging = new Logging({
+  projectId: config.PROJECT_ID,
+  keyFilename: config.CREDENTIALS_PATH
+});
 
 /**
  * Logs Spinnaker events to Stackdriver Logging.
@@ -9,7 +14,7 @@ const logging = require('@google-cloud/logging')({projectId: config.PROJECT_ID, 
  * @param {!Object} res Cloud Function response context.
  */
 exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
-  log('req.body.payload=' + JSON.stringify(req.body.payload), null, null, 'debug');
+  log('req.body.payload=' + JSON.stringify(req.body.payload), null, null, 'DEBUG');
 
   try {
     verifyWebhook(req.get('authorization') || '');
@@ -25,8 +30,12 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
       var stageDetails = (execution && execution.stages && execution.stages.length > 0) ? execution.stages.find(stage => stage.status === 'RUNNING') : {};
       var user = execution && execution.authentication && execution.authentication.user ? execution.authentication.user : 'n/a';
 
-      if (execution && execution.trigger && execution.trigger.runAsUser) {
-        user = execution.trigger.runAsUser;
+      if (execution && execution.trigger) {
+        if (execution.trigger.runAsUser) {
+          user = execution.trigger.runAsUser;
+        } else if (execution.trigger.user) {
+          user = execution.trigger.user;
+        }
       }
 
       var creationTimestamp = moment.tz(Number(req.body.payload.details.created), config.TIMEZONE).format('ddd, DD MMM YYYY HH:mm:ss z');
@@ -41,7 +50,7 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
           if (lastBuild.result === 'SUCCESS') {
             log('Jenkins project ' + content.project.name + ' successfully completed build #' + lastBuild.number + ' at ' + jenkinsTimestamp + '.', null, null);
           } else {
-            log('Jenkins project ' + content.project.name + ' completed build #' + lastBuild.number + ' with status ' + lastBuild.result + ' at ' + jenkinsTimestamp + '.', null, null, 'error');
+            log('Jenkins project ' + content.project.name + ' completed build #' + lastBuild.number + ' with status ' + lastBuild.result + ' at ' + jenkinsTimestamp + '.', null, null, 'ERROR');
           }
         } else if (eventType === 'docker') {
           log('Docker tag ' + content.tag + ' was pushed to repository ' + content.repository + ' in registry ' + content.registry + ' at ' + creationTimestamp + '.', null, null);
@@ -68,15 +77,17 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
         if (cancellationUser) {
           reasonSegment = execution.cancellationReason ? ' for reason "' + execution.cancellationReason + '"' : '';
 
-          log('User ' + cancellationUser + ' canceled pipeline ' + execution.name + ' of application ' + execution.application + reasonSegment + ' at ' + creationTimestamp + '.', execution.application, execution.name, 'warning');
+          log('User ' + cancellationUser + ' canceled pipeline ' + execution.name + ' of application ' + execution.application + reasonSegment + ' at ' + creationTimestamp + '.', execution.application, execution.name, 'WARNING');
         } else {
-          log('Pipeline ' + execution.name + ' of application ' + execution.application + ' failed at ' + creationTimestamp + '.', execution.application, execution.name, 'error');
+          log('Pipeline ' + execution.name + ' of application ' + execution.application + ' failed at ' + creationTimestamp + '.', execution.application, execution.name, 'ERROR');
         }
       } else if (eventType === 'orca:pipeline:complete') {
         log('Pipeline ' + execution.name + ' of application ' + execution.application + ' completed at ' + creationTimestamp + '.', execution.application, execution.name);
-      } else if (!content.standalone && context && stageDetails && stageDetails.type === 'manualJudgment' && eventType === 'orca:stage:failed') {
-        log('User ' + context.lastModifiedBy + ' judged stage ' + stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to stop at ' + creationTimestamp + '.', execution.application, execution.name, 'warning');
-      } else if (!content.standalone && context && stageDetails && stageDetails.type === 'manualJudgment' && eventType === 'orca:stage:complete') {
+      } else if (!content.standalone && context && stageDetails && stageDetails.type === 'manualJudgment' && eventType === 'orca:task:failed') {
+        var judgmentInputSegment = context.judgmentInput ? ' (judgment "' + context.judgmentInput + '" was selected)' : '';
+
+        log('User ' + context.lastModifiedBy + ' judged stage ' + stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to stop' + judgmentInputSegment + ' at ' + creationTimestamp + '.', execution.application, execution.name, 'WARNING');
+      } else if (!content.standalone && context && stageDetails && stageDetails.type === 'manualJudgment' && eventType === 'orca:task:complete') {
         var judgmentInputSegment = context.judgmentInput ? ' (judgment "' + context.judgmentInput + '" was selected)' : '';
 
         log('User ' + context.lastModifiedBy + ' judged stage ' + stageDetails.name + ' of pipeline ' + execution.name + ' of application ' + execution.application + ' to continue' + judgmentInputSegment + ' at ' + creationTimestamp + '.');
@@ -84,16 +95,16 @@ exports.spinnakerAuditLog = function spinnakerAuditLog (req, res) {
         var failureReasonSegment = context.exception && context.exception.details && context.exception.details.errors && context.exception.details.errors[0] ? ' due to ' + JSON.stringify(context.exception.details.errors) : '';
 
         if (!content.standalone) {
-          log('Operation ' + stageDetails.name + ' (of type ' + stageDetails.type + ') of pipeline ' + execution.name + ' of application ' + execution.application + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.', execution.application, execution.name, 'error');
+          log('Operation ' + stageDetails.name + ' (of type ' + stageDetails.type + ') of pipeline ' + execution.name + ' of application ' + execution.application + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.', execution.application, execution.name, 'ERROR');
         } else {
-          log('Ad-hoc operation ' + stageDetails.type + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.', null, null, 'error');
+          log('Ad-hoc operation ' + stageDetails.type + ' failed' + failureReasonSegment + ' at ' + creationTimestamp + '.', null, null, 'ERROR');
         }
       }
 
       res.status(200).send('Success: ' + req.body.eventName);
     }
   } catch (err) {
-    log(err, 'error');
+    log(err, 'ERROR');
     res.status(err.code || 500).send(err);
   }
 };
@@ -118,12 +129,12 @@ function verifyWebhook (authorization) {
  * Writes message to StackDriver with specified severity.
  * 
  * @param {string} message - The message to log to StackDriver logging.
- * @param {('alert', 'critical', 'debug', 'emergency', 'error', 'info', 'notice', 'warning', 'write')} severity - The 
- * severity of the logged message. Defaults to 'info'.
+ * @param {('ALERT', 'CRITICAL', 'DEBUG', 'EMERGENCY', 'ERROR', 'INFO', 'NOTICE', 'WARNING', 'WRITE')} severity - The
+ * severity of the logged message. Defaults to 'INFO'.
  */
-function log(message, application, pipeline, severity = 'info') {
+function log(message, application, pipeline, severity = 'INFO') {
   var log = logging.log(config.AUDIT_LOG_NAME);
-  var metadata = {resource: {type: 'cloud_function'}};
+  var metadata = {resource: {type: 'cloud_function'}, severity: severity};
   var jsonPayload = {message: message};
   if (application) {
     jsonPayload.application = application;
@@ -132,6 +143,6 @@ function log(message, application, pipeline, severity = 'info') {
     jsonPayload.pipeline = pipeline;
   }
   var entry = log.entry(metadata, jsonPayload);
-  
-  log[severity](entry, function() {});
+
+  log.write(entry);
 }
